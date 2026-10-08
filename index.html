@@ -317,12 +317,20 @@ function renderPlace(p, admin = false) {
     }
   } else h += `<p class="empty">공시지가 정보가 없습니다.</p>`;
   const tr = cur?.trades || [];
-  h += `<div class="sec">최근 아파트 실거래 (최근 3개월, 같은 지번)</div>`;
+  h += `<div class="sec">아파트 매매 실거래 기록 (최근 6개월, 같은 지번)</div>`;
   if (tr.length) {
     h += `<table><tr><th>계약일</th><th>단지</th><th>전용(㎡)</th><th>층</th><th>거래금액</th></tr>` +
-      tr.slice(0, 6).map(t => `<tr><td>${esc(t.date)}</td><td>${esc(t.apt)}</td><td>${esc(t.area_m2)}</td><td>${esc(t.floor)}</td><td>${manwon(t.price_manwon)}</td></tr>`).join("") + `</table>
+      tr.slice(0, 10).map(t => `<tr><td>${esc(t.date)}</td><td>${esc(t.apt)}</td><td>${esc(t.area_m2)}</td><td>${esc(t.floor)}</td><td>${manwon(t.price_manwon)}</td></tr>`).join("") + `</table>
       <span class="tag">이번 기록 ${tr.length}건${prev ? ` / 지난 기록 ${(prev.trades || []).length}건` : ""} · 거래금액은 만원 단위 자료를 억·만원으로 환산</span>`;
-  } else h += `<p class="empty">해당 지번의 최근 3개월 아파트 실거래가 없습니다. (토지·단독 등은 해당 없음)</p>`;
+  } else h += `<p class="empty">해당 지번의 최근 6개월 아파트 매매 실거래가 없습니다. (토지·단독 등은 해당 없음)</p>`;
+
+  const rn = cur?.rents || [];
+  h += `<div class="sec">아파트 전·월세 실거래 기록 (최근 6개월, 같은 지번)</div>`;
+  if (rn.length) {
+    h += `<table><tr><th>계약일</th><th>단지</th><th>전용(㎡)</th><th>구분</th><th>보증금 / 월세</th></tr>` +
+      rn.slice(0, 10).map(t => `<tr><td>${esc(t.date)}</td><td>${esc(t.apt)}</td><td>${esc(t.area_m2)}</td><td>${esc(t.kind)}</td><td>${manwon(t.deposit_manwon)}${t.monthly_manwon > 0 ? ` / 월 ${won(t.monthly_manwon)}만원` : ""}</td></tr>`).join("") + `</table>
+      <span class="tag">전세 ${rn.filter(t => t.kind === "전세").length}건 · 월세 ${rn.filter(t => t.kind === "월세").length}건 (최근 6개월 전체) · 만원 단위 자료를 억·만원으로 환산</span>`;
+  } else h += `<p class="empty">해당 지번의 최근 6개월 아파트 전·월세 실거래가 없습니다.</p>`;
   h += regionTable("지역 매매", p.region?.sale) + regionTable("지역 전세", p.region?.jeonse);
   h += `<div class="sec">주간 기록</div><div class="tag">${snaps.length ? snaps.map(s => esc(s.week)).join(" · ") : "아직 기록이 없습니다."} (월요일 기준 주)</div></div>`;
   return h;
