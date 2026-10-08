@@ -1,17 +1,25 @@
--- 부동산 조회 사이트 테이블 (Supabase SQL Editor에서 한 번 실행)
+-- 부동산 조회 사이트 테이블 (Supabase SQL Editor에 붙여 넣고 Run)
 -- 모든 접근은 Edge Function(서비스 키)만 사용하므로 RLS를 켜고 정책은 만들지 않습니다.
+-- 이미 이전 버전을 실행했어도 다시 실행하면 필요한 부분만 바뀝니다.
 
 create table if not exists places (
   id uuid primary key default gen_random_uuid(),
+  code text,                     -- 보관 코드(6자리 영문+숫자, 대문자로 저장)
   name text not null,            -- 관심 위치 이름(사용자 입력)
   memo text,
   lat double precision not null, -- 위도
   lng double precision not null, -- 경도
-  pnu text not null unique,      -- 필지고유번호(19자리)
+  pnu text not null,             -- 필지고유번호(19자리)
   addr text,                     -- 지번 주소
   jibun text,                    -- 지번(지목 포함)
   created_at timestamptz not null default now()
 );
+
+-- 이전 버전(필지당 1건 제한)에서 올라오는 경우를 위한 보정
+alter table places add column if not exists code text;
+alter table places drop constraint if exists places_pnu_key;
+create unique index if not exists places_code_pnu_idx on places (code, pnu);
+create index if not exists places_code_idx on places (code);
 
 -- 주 단위 저장 기록: 관심 위치별 공시지가·최근 실거래 요약
 create table if not exists snapshots (
@@ -19,8 +27,10 @@ create table if not exists snapshots (
   week date not null,            -- 해당 주 월요일(한국시간)
   payload jsonb not null,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   primary key (place_id, week)
 );
+alter table snapshots add column if not exists updated_at timestamptz not null default now();
 
 -- 한국부동산원 주간 아파트 가격 변동률(%)
 create table if not exists region_weekly (
