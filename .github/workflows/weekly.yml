@@ -10,12 +10,12 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - name: 관심 위치 주간 기록 갱신
+      - name: 저장된 모든 관심 위치 주간 기록 갱신
         env:
-          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          CRON_KEY: ${{ secrets.CRON_KEY }}
         run: |
           curl -fsS -X POST \
-            -H "x-app-password: ${APP_PASSWORD}" \
+            -H "x-cron-key: ${CRON_KEY}" \
             -H "Content-Type: application/json" \
             -d '{}' \
             "https://vewmmndhipvazzmttzzr.supabase.co/functions/v1/realestate?op=refresh"
