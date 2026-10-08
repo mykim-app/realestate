@@ -85,6 +85,48 @@ async function lookupParcel(lat: number, lng: number) {
   };
 }
 
+// 주소·건물·단지 이름 검색 (브이월드 검색: 도로명 + 지번 + 장소)
+async function geocode(q: string) {
+  const search = async (type: string, category?: string) => {
+    const u = new URL("https://api.vworld.kr/req/search");
+    u.searchParams.set("service", "search");
+    u.searchParams.set("request", "search");
+    u.searchParams.set("version", "2.0");
+    u.searchParams.set("crs", "EPSG:4326");
+    u.searchParams.set("size", "5");
+    u.searchParams.set("page", "1");
+    u.searchParams.set("query", q);
+    u.searchParams.set("type", type);
+    if (category) u.searchParams.set("category", category);
+    u.searchParams.set("format", "json");
+    u.searchParams.set("key", env("VWORLD_KEY"));
+    u.searchParams.set("domain", env("VWORLD_DOMAIN"));
+    try {
+      const j = await (await fetch(u)).json();
+      return j?.response?.result?.items ?? [];
+    } catch { return []; }
+  };
+  const [road, parcel, place] = await Promise.all([
+    search("ADDRESS", "road"), search("ADDRESS", "parcel"), search("PLACE"),
+  ]);
+  const out: { label: string; sub: string; lat: number; lng: number }[] = [];
+  const seen = new Set<string>();
+  const push = (it: any, isPlace: boolean) => {
+    const lng = Number(it?.point?.x), lat = Number(it?.point?.y);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const a = it.address ?? {};
+    const label = isPlace ? String(it.title ?? "") : String(a.road || a.parcel || "");
+    const sub = isPlace ? String(a.road || a.parcel || "") : (a.road && a.parcel ? String(a.parcel) : "");
+    if (!label || seen.has(label + sub)) return;
+    seen.add(label + sub);
+    out.push({ label, sub, lat, lng });
+  };
+  for (const it of road) push(it, false);
+  for (const it of parcel) push(it, false);
+  for (const it of place) push(it, true);
+  return out.slice(0, 10);
+}
+
 async function landPriceHistory(pnu: string) {
   const u = new URL("https://api.vworld.kr/ned/data/getIndvdLandPriceAttr");
   u.searchParams.set("key", env("VWORLD_KEY"));
@@ -252,6 +294,12 @@ Deno.serve(async (req) => {
       return json({ ...p, history: await landPriceHistory(p.pnu) });
     }
 
+    if (op === "geocode") {
+      const q = String(url.searchParams.get("q") ?? "").trim();
+      if (q.length < 2 || q.length > 100) return json({ error: "검색어는 두 글자 이상 입력해 주세요." }, 400);
+      return json({ items: await geocode(q) });
+    }
+
     if (op === "suggest_code") {
       for (let i = 0; i < 10; i++) {
         const c = randomCode();
@@ -348,6 +396,24 @@ Deno.serve(async (req) => {
       for (const p of all) (byCode[p.code ?? "(코드 없음)"] ||= []).push(p);
       return json({ total: all.length, codes: Object.entries(byCode).map(([code, places]) => ({ code, places })) });
     }
+    // 한국부동산원 통계표 이름으로 ID 찾기 (Secrets에 넣을 통계표 ID 확인용)
+    if (op === "reb_tables") {
+      if (!(await isAdmin(req))) return json({ error: "관리자 인증이 필요합니다." }, 401);
+      if (!env("REB_KEY")) return json({ error: "REB_KEY(한국부동산원 인증키)가 아직 Secrets에 없습니다." }, 400);
+      const words = String(url.searchParams.get("kw") ?? "주간 아파트").trim().split(/\s+/).filter(Boolean);
+      const u = new URL("https://www.reb.or.kr/r-one/openapi/SttsApiTbl.do");
+      u.searchParams.set("KEY", env("REB_KEY"));
+      u.searchParams.set("Type", "json");
+      u.searchParams.set("pIndex", "1");
+      u.searchParams.set("pSize", "1000");
+      const j = await (await fetch(u)).json();
+      const root: any = Object.values(j ?? {})[0];
+      const rows: any[] = Array.isArray(root) ? (root.find((x: any) => x?.row)?.row ?? []) : [];
+      const all = rows.map((r) => ({ id: String(r.STATBL_ID ?? ""), name: String(r.STATBL_NM ?? r.STATBL_NAME ?? "") }));
+      const items = all.filter((r) => r.id && words.every((w) => r.name.includes(w))).slice(0, 60);
+      return json({ items, total: all.length, hint: all.length ? "" : JSON.stringify(j).slice(0, 300) });
+    }
+
     if (op === "admin_delete") {
       if (!(await isAdmin(req))) return json({ error: "관리자 인증이 필요합니다." }, 401);
       const { error } = await sb.from("places").delete().eq("id", body.id);
