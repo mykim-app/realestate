@@ -18,7 +18,7 @@
 1. **API 키 발급** (모두 무료)
    - 브이월드(vworld.kr) 오픈API 인증키 (서비스 URL에는 게시할 GitHub Pages 주소 입력)
    - 공공데이터포털(data.go.kr) "국토교통부_아파트 매매 실거래가 자료" 활용신청 후 일반 인증키
-   - 한국부동산원 R-ONE(reb.or.kr/r-one) Open API 인증키와, 명세서의 주간 아파트 매매·전세 통계표 ID
+   - 한국부동산원 R-ONE(reb.or.kr/r-one) Open API 인증키 (회원가입 후 Open API 메뉴에서 신청). 통계표 ID는 아래 「통계표 ID 찾는 법」 참고 (선택 사항)
 2. **Supabase 대시보드 → SQL Editor**: `supabase/schema.sql` 내용을 붙여 넣고 Run (이전 버전을 이미 실행했어도 그대로 다시 실행)
 3. **Supabase 대시보드 → Edge Functions → Deploy a new function(Via Editor)**: 이름 `realestate`, `index.ts` 내용을 붙여 넣고 배포한 뒤, 함수 설정에서 **Verify JWT를 끕니다.** (이미 배포했다면 코드만 교체)
 4. **Supabase 대시보드 → Edge Functions → Secrets**: 아래 이름으로 값을 입력합니다. 키 값은 코드에 넣지 않고 여기에만 보관됩니다.
@@ -38,6 +38,13 @@
 5. **GitHub 웹**: 새 저장소를 만들고 `index.html`, `README.md`를 업로드합니다. 자동 기록 파일은 Add file → Create new file에서 이름을 `.github/workflows/weekly.yml`로 입력해 내용을 붙여 넣습니다.
 6. **GitHub 웹 → Settings → Pages**: 브랜치를 지정해 게시합니다. **Settings → Secrets and variables → Actions**에 `CRON_KEY`(위 4번과 같은 값)를 등록합니다.
 7. 게시된 주소에 접속 → 지도에서 위치 선택 → 저장
+
+## 통계표 ID 찾는 법 (지역 주간 동향을 쓰고 싶을 때만)
+1. 위 4번에서 `REB_KEY`까지 입력하고 함수를 배포합니다. (통계표 ID 두 칸은 비워 둡니다.)
+2. 사이트 오른쪽 맨 아래 2px 점 → 관리자 인증 → 화면 위쪽의 **「한국부동산원 통계표 ID 찾기」** 에서 `주간 아파트 매매`를 검색합니다.
+3. 목록에서 이름에 **증감률(변동률)** 이 들어간 주간 매매 통계표의 ID를 눌러 복사해 `REB_SALE_STATBL_ID`에 넣습니다. 같은 방법으로 `주간 아파트 전세`를 찾아 `REB_JEONSE_STATBL_ID`에 넣습니다.
+4. Secrets를 저장한 뒤 관리자 화면의 「전체 새로고침」을 누르면 지역 주간 동향이 채워집니다.
+- R-ONE 사이트에서 직접 찾으려면 통계표 화면 또는 Open API 목록 화면에서 해당 통계표를 열면 통계표 ID가 표시됩니다.
 
 ## 알아 둘 점
 - 보관 코드를 아는 사람은 그 목록을 볼 수 있으므로 코드는 본인만 보관하세요. 한 코드에는 30곳까지 저장됩니다.

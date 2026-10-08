@@ -99,6 +99,11 @@
       <button class="ghost" id="adminRefresh">전체 새로고침</button>
       <button class="ghost" id="adminExit">나가기</button>
     </div>
+    <div class="codebar" style="margin-top:12px">
+      <b>한국부동산원 통계표 ID 찾기</b> <span class="tag">(Secrets의 REB_SALE_STATBL_ID·REB_JEONSE_STATBL_ID에 넣을 값)</span>
+      <div class="row"><input type="text" id="rebKw" value="주간 아파트 매매" placeholder="통계표 이름 일부 (띄어쓰기로 구분)"><button class="primary" id="rebFind">찾기</button></div>
+      <div id="rebOut" class="hint"></div>
+    </div>
     <div id="adminBody"><p class="empty">불러오는 중...</p></div>
   </section>
 </div>
@@ -387,6 +392,17 @@ async function loadAdmin() {
     $("adminBody").innerHTML = `<p class="empty">${esc(e.message)}</p>`;
   }
 }
+$("rebFind").onclick = async () => {
+  const out = $("rebOut");
+  out.textContent = "찾는 중...";
+  try {
+    const r = await call("reb_tables", { admin: true }, `&kw=${encodeURIComponent($("rebKw").value)}`);
+    if (!r.items.length) { out.textContent = r.total ? "일치하는 통계표가 없습니다. 검색어를 줄여 보세요. (예: 주간 아파트)" : "통계표 목록을 받지 못했습니다. " + (r.hint || ""); return; }
+    out.innerHTML = `<table><tr><th>통계표 이름</th><th>ID (눌러서 복사)</th></tr>` +
+      r.items.map(x => `<tr><td>${esc(x.name)}</td><td><button class="ghost" data-id="${esc(x.id)}">${esc(x.id)}</button></td></tr>`).join("") + `</table>`;
+    out.querySelectorAll("[data-id]").forEach(b => b.onclick = () => copy(b.dataset.id));
+  } catch (e) { out.textContent = e.message; }
+};
 $("adminRefresh").onclick = async () => {
   $("adminRefresh").disabled = true; msg("전체를 새로 불러오는 중입니다...");
   try { await call("refresh", { body: {}, admin: true }); await loadAdmin(); msg("전체 새로고침을 마쳤습니다."); } catch (e) { msg(e.message); }
