@@ -11,19 +11,23 @@
   body { margin:0; font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
   header { background:#0f2a5c; color:#fff; padding:14px 20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   header h1 { font-size:18px; margin:0; flex:1; }
-  header button { background:#ffffff22; color:#fff; border:1px solid #ffffff55; border-radius:6px; padding:6px 12px; cursor:pointer; }
-  main { display:grid; grid-template-columns:minmax(320px,1fr) minmax(320px,1fr); gap:16px; padding:16px; max-width:1300px; margin:0 auto; }
+  header button { background:#ffffff22; color:#fff; border:1px solid #ffffff55; border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  main, #adminView { display:grid; grid-template-columns:minmax(320px,1fr) minmax(320px,1fr); gap:16px; padding:16px; max-width:1300px; margin:0 auto; }
+  #adminView { display:none; grid-template-columns:1fr; }
   @media (max-width:820px){ main { grid-template-columns:1fr; } }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
   .card h2 { font-size:15px; margin:0 0 10px; }
   #map { height:380px; border-radius:8px; }
   .hint { color:var(--sub); font-size:13px; margin:8px 0 0; line-height:1.5; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  input[type=text], input[type=password] { flex:1; min-width:140px; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+  input[type=text] { flex:1; min-width:120px; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  input.codeIn { flex:0 0 130px; min-width:0; text-transform:uppercase; letter-spacing:3px; font-weight:700; text-align:center; }
   button.primary { background:var(--pt); color:#fff; border:0; border-radius:6px; padding:8px 14px; cursor:pointer; font:inherit; }
   button.ghost { background:#fff; border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; font-size:12px; }
   button:disabled { opacity:.5; cursor:default; }
   .picked { background:#eef4ff; border:1px solid #c7d7fb; border-radius:8px; padding:10px; margin-top:10px; font-size:14px; line-height:1.6; }
+  .codebar { background:#fffbea; border:1px solid #f3dd8c; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:14px; line-height:1.7; }
+  .codebar .code { display:inline-block; font-size:20px; font-weight:800; letter-spacing:4px; background:#fff; border:1px dashed #d4b100; border-radius:6px; padding:0 10px; }
   .place { border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; }
   .place h3 { margin:0 0 2px; font-size:15px; display:flex; justify-content:space-between; gap:8px; }
   .addr { color:var(--sub); font-size:13px; margin-bottom:8px; }
@@ -35,18 +39,24 @@
   .tag { display:inline-block; font-size:12px; color:var(--sub); }
   .up { color:var(--up); } .down { color:var(--down); }
   .sec { margin-top:10px; font-size:13px; font-weight:700; }
-  #msg { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#1c2430; color:#fff; padding:10px 16px; border-radius:8px; font-size:14px; display:none; max-width:90vw; }
   .empty { color:var(--sub); font-size:13px; }
+  #msg { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#1c2430; color:#fff; padding:10px 16px; border-radius:8px; font-size:14px; display:none; max-width:90vw; z-index:60; }
+  /* 관리자 접속 점: 화면 오른쪽 아래 2px, 누르기 쉽도록 투명한 터치 영역을 덧붙임 */
+  #adminDot { position:fixed; right:0; bottom:0; width:2px; height:2px; background:#8a94a6; z-index:50; cursor:pointer; }
+  #adminDot::after { content:""; position:absolute; right:0; bottom:0; width:28px; height:28px; }
+  #adminModal { position:fixed; inset:0; background:#0007; display:none; align-items:center; justify-content:center; z-index:70; }
+  #adminModal .box { background:#fff; border-radius:10px; padding:18px; width:min(360px,92vw); }
+  .codeGroup { margin:0 0 14px; }
+  .codeGroup > h3 { margin:0 0 8px; font-size:15px; }
 </style>
 </head>
 <body>
 <header>
   <h1>부동산 가격 조회 (주간 확인 · 공시지가)</h1>
-  <button id="btnRefresh">지금 새로고침</button>
-  <button id="btnPw">비밀번호 변경</button>
+  <button id="btnRefresh">내 위치 새로고침</button>
 </header>
 
-<main>
+<main id="mainView">
   <section class="card">
     <h2>1. 지도에서 위치 선택</h2>
     <div id="map"></div>
@@ -55,15 +65,48 @@
     <div class="row" id="saveRow" style="display:none">
       <input type="text" id="placeName" placeholder="저장할 이름 (예: 우리집, 투자검토 토지)">
       <input type="text" id="placeMemo" placeholder="메모 (선택)">
+    </div>
+    <div class="row" id="saveRow2" style="display:none">
+      <span id="codeLabel" class="tag"></span>
+      <input type="text" id="newCode" class="codeIn" maxlength="6" placeholder="코드" autocomplete="off">
       <button class="primary" id="btnSave">관심 위치로 저장</button>
     </div>
   </section>
 
   <section class="card">
     <h2>2. 저장한 관심 위치 (주 단위 기록)</h2>
-    <div id="list"><p class="empty">불러오는 중...</p></div>
+    <div id="codebar"></div>
+    <div id="list"><p class="empty">저장한 적이 있다면 위에 보관 코드를 입력해 불러오세요.</p></div>
   </section>
 </main>
+
+<div id="adminView">
+  <section class="card">
+    <div class="row" style="margin-top:0">
+      <h2 style="margin:0;flex:1" id="adminTitle">관리자 — 전체 보기</h2>
+      <button class="ghost" id="adminRefresh">전체 새로고침</button>
+      <button class="ghost" id="adminExit">나가기</button>
+    </div>
+    <div id="adminBody"><p class="empty">불러오는 중...</p></div>
+  </section>
+</div>
+
+<div id="adminModal">
+  <div class="box">
+    <h2 style="margin:0 0 10px;font-size:16px">관리자 인증</h2>
+    <div id="admStep1">
+      <p class="hint" style="margin-top:0">관리자 메일로 인증번호를 보냅니다.</p>
+      <div class="row"><button class="primary" id="admSend">인증번호 받기</button><button class="ghost" id="admClose1">닫기</button></div>
+    </div>
+    <div id="admStep2" style="display:none">
+      <p class="hint" style="margin-top:0">메일로 받은 인증번호를 입력하세요.</p>
+      <div class="row"><input type="text" id="admCode" inputmode="numeric" autocomplete="one-time-code" placeholder="인증번호"><button class="primary" id="admOk">확인</button></div>
+      <div class="row"><button class="ghost" id="admClose2">닫기</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="adminDot" title=""></div>
 <div id="msg"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -71,10 +114,12 @@
 // 이미 만들어 둔 Supabase 프로젝트 주소가 미리 채워져 있습니다.
 const API = "https://vewmmndhipvazzmttzzr.supabase.co/functions/v1/realestate";
 const PYEONG = 3.305785; // 1평 = 3.305785㎡
+const CODE_RE = /^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]{6}$/;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const won = (n) => Number(n).toLocaleString("ko-KR");
+const normCode = (s) => String(s || "").trim().toUpperCase();
 
 // 만원 단위 금액 -> "O억 O,OOO만원"
 function manwon(n) {
@@ -86,28 +131,80 @@ function manwon(n) {
   return `${won(rest)}만원`;
 }
 function msg(t) { const m = $("msg"); m.textContent = t; m.style.display = "block"; clearTimeout(msg.t); msg.t = setTimeout(() => m.style.display = "none", 3500); }
-
-function pw() {
-  let v = localStorage.getItem("re_pw");
-  if (!v) { v = prompt("사이트 비밀번호를 입력하세요."); if (v) localStorage.setItem("re_pw", v); }
-  return v || "";
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+  msg("복사했습니다.");
 }
+
+// ---------- 서버 호출 ----------
+function adminToken() { try { return sessionStorage.getItem("re_admin") || ""; } catch { return ""; } }
 async function call(op, opts = {}, qs = "") {
+  const headers = {};
+  if (opts.body) headers["Content-Type"] = "application/json";
+  if (opts.admin) headers["x-admin-token"] = adminToken();
   const r = await fetch(`${API}?op=${op}${qs}`, {
-    method: opts.body ? "POST" : "GET",
-    headers: { "x-app-password": pw(), ...(opts.body ? { "Content-Type": "application/json" } : {}) },
+    method: opts.body ? "POST" : "GET", headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401) localStorage.removeItem("re_pw");
   if (!r.ok) throw new Error(j.error || `요청 실패 (${r.status})`);
   return j;
+}
+
+// ---------- 보관 코드 (즐겨찾기처럼 다시 찾기) ----------
+let code = "";
+function setCode(c) {
+  code = c;
+  try { c ? localStorage.setItem("re_code", c) : localStorage.removeItem("re_code"); } catch {}
+  if (c) history.replaceState(null, "", "#" + c); else history.replaceState(null, "", location.pathname);
+  renderCodebar();
+}
+function bookmarkUrl() { return location.origin + location.pathname + "#" + code; }
+
+function renderCodebar() {
+  if (code) {
+    $("codebar").innerHTML = `<div class="codebar">내 보관 코드 <span class="code">${esc(code)}</span>
+      <div class="row">
+        <button class="ghost" id="cpCode">코드 복사</button>
+        <button class="ghost" id="cpUrl">즐겨찾기용 주소 복사</button>
+        <button class="ghost" id="chCode">다른 코드 불러오기</button>
+      </div>
+      <div class="hint">이 주소를 브라우저 즐겨찾기에 추가해 두면 코드를 입력하지 않고 바로 내 목록이 열립니다.</div></div>`;
+    $("cpCode").onclick = () => copy(code);
+    $("cpUrl").onclick = () => copy(bookmarkUrl());
+    $("chCode").onclick = () => { setCode(""); $("list").innerHTML = `<p class="empty">불러올 보관 코드를 입력하세요.</p>`; showCodeEntry(); updateSaveCodeUi(); };
+  } else showCodeEntry();
+}
+function showCodeEntry() {
+  $("codebar").innerHTML = `<div class="codebar">저장한 적이 있다면 보관 코드(영문·숫자 6자리)를 입력하세요.
+    <div class="row"><input type="text" id="loadCode" class="codeIn" maxlength="6" placeholder="코드" autocomplete="off"><button class="primary" id="btnLoad">불러오기</button></div>
+    <div class="hint">처음이라면 지도에서 위치를 저장할 때 코드가 자동으로 만들어집니다.</div></div>`;
+  $("btnLoad").onclick = loadByInput;
+  $("loadCode").onkeydown = (e) => { if (e.key === "Enter") loadByInput(); };
+}
+async function loadByInput() {
+  const c = normCode($("loadCode").value);
+  if (!CODE_RE.test(c)) return msg("보관 코드는 영문과 숫자를 섞은 6자리입니다.");
+  setCode(c); updateSaveCodeUi(); await load();
 }
 
 // ---------- 지도 ----------
 const map = L.map("map").setView([37.3947, 126.6403], 14); // 시작 위치: 송도국제도시 일대
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
-let marker = null, picked = null;
+let marker = null, picked = null, suggested = "";
+
+async function updateSaveCodeUi() {
+  if (code) {
+    $("codeLabel").textContent = "저장 위치: 보관 코드";
+    $("newCode").value = code; $("newCode").readOnly = true;
+  } else {
+    $("codeLabel").textContent = "새 보관 코드(원하면 바꿀 수 있습니다)";
+    $("newCode").readOnly = false;
+    if (!suggested) { try { suggested = (await call("suggest_code")).code; } catch {} }
+    $("newCode").value = suggested;
+  }
+}
 
 map.on("click", async (e) => {
   const { lat, lng } = e.latlng;
@@ -115,7 +212,7 @@ map.on("click", async (e) => {
   marker = L.marker([lat, lng]).addTo(map);
   $("picked").style.display = "block";
   $("picked").textContent = "필지 정보를 조회하는 중...";
-  $("saveRow").style.display = "none";
+  $("saveRow").style.display = "none"; $("saveRow2").style.display = "none";
   try {
     const p = await call("lookup", {}, `&lat=${lat}&lng=${lng}`);
     picked = { lat, lng, ...p };
@@ -125,34 +222,39 @@ map.on("click", async (e) => {
       (jiga != null
         ? `개별공시지가 <b>${won(jiga)}원/㎡</b> <span class="tag">(1평당 약 ${won(Math.round(jiga * PYEONG))}원${p.gosiYear ? `, ${esc(p.gosiYear)}년 기준` : ""})</span>`
         : "공시지가 정보가 없습니다.");
-    $("saveRow").style.display = "flex";
+    $("saveRow").style.display = "flex"; $("saveRow2").style.display = "flex";
     if (!$("placeName").value) $("placeName").value = p.addr;
+    updateSaveCodeUi();
   } catch (err) { $("picked").textContent = err.message; picked = null; }
 });
+
+$("newCode").addEventListener("input", (e) => { if (!e.target.readOnly) e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); });
 
 $("btnSave").onclick = async () => {
   if (!picked) return;
   const name = $("placeName").value.trim();
   if (!name) return msg("저장할 이름을 입력해 주세요.");
+  const useCode = code || normCode($("newCode").value);
+  if (!CODE_RE.test(useCode)) return msg("보관 코드는 영문과 숫자를 섞은 6자리로 입력해 주세요.");
   $("btnSave").disabled = true;
   try {
-    await call("add", { body: { name, memo: $("placeMemo").value.trim(), lat: picked.lat, lng: picked.lng } });
-    msg("저장했습니다.");
+    const wasNew = !code;
+    await call("add", { body: { code: useCode, name, memo: $("placeMemo").value.trim(), lat: picked.lat, lng: picked.lng } });
     $("placeName").value = ""; $("placeMemo").value = "";
+    if (wasNew) { setCode(useCode); suggested = ""; msg(`저장했습니다. 보관 코드 ${useCode} 를 기억해 두세요.`); }
+    else msg("저장했습니다.");
     await load();
   } catch (err) { msg(err.message); }
   $("btnSave").disabled = false;
 };
 
 // ---------- 목록 ----------
-function delta(cur, prev, unit) {
+function delta(cur, prev) {
   if (cur == null || prev == null || prev === 0) return "";
   const d = cur - prev;
   if (d === 0) return `<span class="tag">변동 없음</span>`;
-  const pct = (d / prev * 100).toFixed(2);
-  return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${pct}%</span>`;
+  return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${(d / prev * 100).toFixed(2)}%</span>`;
 }
-
 function regionTable(title, rows) {
   if (!rows?.length) return "";
   return `<div class="sec">${title} (한국부동산원 주간, 전주 대비 %)</div><table>
@@ -160,14 +262,12 @@ function regionTable(title, rows) {
     ${rows.slice(0, 4).map(r => `<tr><td>${esc(r.region)}</td><td>${esc(r.week)}</td><td class="${r.pct > 0 ? "up" : r.pct < 0 ? "down" : ""}">${r.pct ?? "-"}</td></tr>`).join("")}
   </table>`;
 }
-
-function renderPlace(p) {
+function renderPlace(p, admin = false) {
   const snaps = p.snapshots || [];
   const cur = snaps[0]?.payload, prev = snaps[1]?.payload;
   const land = cur?.land;
-  let h = `<div class="place"><h3><span>${esc(p.name)}</span><button class="ghost" data-del="${esc(p.id)}">삭제</button></h3>
-    <div class="addr">${esc(p.addr)}${p.memo ? " · " + esc(p.memo) : ""}</div>`;
-
+  let h = `<div class="place"><h3><span>${esc(p.name)}</span><button class="ghost" data-del="${esc(p.id)}" ${admin ? 'data-admin="1"' : ""}>삭제</button></h3>
+    <div class="addr">${esc(p.addr)}${p.memo ? " · " + esc(p.memo) : ""}${admin ? ` · 저장 ${esc((p.created_at || "").slice(0, 10))}` : ""}</div>`;
   if (land?.won_per_m2 != null) {
     h += `<div class="sec">개별공시지가</div><div class="big">${won(land.won_per_m2)}원/㎡</div>
       <span class="tag">1평당 약 ${won(Math.round(land.won_per_m2 * PYEONG))}원 · ${esc(land.year ?? "")}년 기준</span>`;
@@ -176,7 +276,6 @@ function renderPlace(p) {
         land.history.slice(0, 6).map((x, i, a) => `<tr><td>${esc(x.year)}</td><td>${won(x.won_per_m2)}</td><td>${i < a.length - 1 ? delta(x.won_per_m2, a[i + 1].won_per_m2) : ""}</td></tr>`).join("") + `</table>`;
     }
   } else h += `<p class="empty">공시지가 정보가 없습니다.</p>`;
-
   const tr = cur?.trades || [];
   h += `<div class="sec">최근 아파트 실거래 (최근 3개월, 같은 지번)</div>`;
   if (tr.length) {
@@ -184,31 +283,90 @@ function renderPlace(p) {
       tr.slice(0, 6).map(t => `<tr><td>${esc(t.date)}</td><td>${esc(t.apt)}</td><td>${esc(t.area_m2)}</td><td>${esc(t.floor)}</td><td>${manwon(t.price_manwon)}</td></tr>`).join("") + `</table>
       <span class="tag">이번 기록 ${tr.length}건${prev ? ` / 지난 기록 ${(prev.trades || []).length}건` : ""} · 거래금액은 만원 단위 자료를 억·만원으로 환산</span>`;
   } else h += `<p class="empty">해당 지번의 최근 3개월 아파트 실거래가 없습니다. (토지·단독 등은 해당 없음)</p>`;
-
   h += regionTable("지역 매매", p.region?.sale) + regionTable("지역 전세", p.region?.jeonse);
   h += `<div class="sec">주간 기록</div><div class="tag">${snaps.length ? snaps.map(s => esc(s.week)).join(" · ") : "아직 기록이 없습니다."} (월요일 기준 주)</div></div>`;
   return h;
 }
-
+function bindDelete(root) {
+  root.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    if (!confirm("이 관심 위치를 삭제할까요? 주간 기록도 함께 삭제됩니다.")) return;
+    try {
+      if (b.dataset.admin) { await call("admin_delete", { body: { id: b.dataset.del }, admin: true }); await loadAdmin(); }
+      else { await call("delete", { body: { id: b.dataset.del, code } }); await load(); }
+    } catch (e) { msg(e.message); }
+  });
+}
 async function load() {
+  if (!code) { $("list").innerHTML = `<p class="empty">저장한 적이 있다면 위에 보관 코드를 입력해 불러오세요.</p>`; return; }
   try {
-    const { places } = await call("list");
-    $("list").innerHTML = places.length ? places.map(renderPlace).join("") : `<p class="empty">저장한 위치가 없습니다. 지도에서 위치를 눌러 저장해 보세요.</p>`;
-    document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
-      if (!confirm("이 관심 위치를 삭제할까요? 주간 기록도 함께 삭제됩니다.")) return;
-      try { await call("delete", { body: { id: b.dataset.del } }); await load(); } catch (e) { msg(e.message); }
-    });
+    const { places } = await call("list", {}, `&code=${encodeURIComponent(code)}`);
+    $("list").innerHTML = places.length ? places.map(p => renderPlace(p)).join("") : `<p class="empty">이 코드로 저장한 위치가 없습니다. 지도에서 위치를 눌러 저장해 보세요.</p>`;
+    bindDelete($("list"));
   } catch (err) { $("list").innerHTML = `<p class="empty">${esc(err.message)}</p>`; }
 }
-
 $("btnRefresh").onclick = async () => {
+  if (!code) return msg("먼저 보관 코드를 불러오거나 위치를 저장해 주세요.");
   $("btnRefresh").disabled = true; msg("새로 불러오는 중입니다...");
-  try { await call("refresh", { body: {} }); await load(); msg("새로고침을 마쳤습니다."); } catch (e) { msg(e.message); }
+  try { const r = await call("refresh_mine", { body: { code } }); await load(); msg(r.updated ? "새로고침을 마쳤습니다." : "최근에 이미 갱신되어 있습니다."); } catch (e) { msg(e.message); }
   $("btnRefresh").disabled = false;
 };
-$("btnPw").onclick = () => { localStorage.removeItem("re_pw"); pw(); load(); };
 
-load();
+// ---------- 관리자 ----------
+$("adminDot").onclick = () => {
+  if (adminToken()) return enterAdmin();
+  $("admStep1").style.display = "block"; $("admStep2").style.display = "none"; $("adminModal").style.display = "flex";
+};
+const closeAdm = () => { $("adminModal").style.display = "none"; };
+$("admClose1").onclick = closeAdm; $("admClose2").onclick = closeAdm;
+$("admSend").onclick = async () => {
+  $("admSend").disabled = true;
+  try { await call("admin_request", { body: {} }); $("admStep1").style.display = "none"; $("admStep2").style.display = "block"; $("admCode").focus(); }
+  catch (e) { msg(e.message); }
+  $("admSend").disabled = false;
+};
+async function verifyAdmin() {
+  try {
+    const r = await call("admin_verify", { body: { code: $("admCode").value.trim() } });
+    try { sessionStorage.setItem("re_admin", r.token); } catch {}
+    closeAdm(); $("admCode").value = ""; enterAdmin();
+  } catch (e) { msg(e.message); }
+}
+$("admOk").onclick = verifyAdmin;
+$("admCode").onkeydown = (e) => { if (e.key === "Enter") verifyAdmin(); };
+
+function enterAdmin() { $("mainView").style.display = "none"; $("adminView").style.display = "grid"; loadAdmin(); }
+$("adminExit").onclick = () => {
+  try { sessionStorage.removeItem("re_admin"); } catch {}
+  $("adminView").style.display = "none"; $("mainView").style.display = "grid";
+};
+async function loadAdmin() {
+  try {
+    const r = await call("admin_list", { admin: true });
+    $("adminTitle").textContent = `관리자 — 보관 코드 ${r.codes.length}개 · 저장 위치 ${r.total}곳`;
+    $("adminBody").innerHTML = r.codes.length
+      ? r.codes.map(g => `<div class="codeGroup"><h3>보관 코드 <span style="letter-spacing:3px">${esc(g.code)}</span> <span class="tag">(${g.places.length}곳)</span></h3>${g.places.map(p => renderPlace(p, true)).join("")}</div>`).join("")
+      : `<p class="empty">저장된 위치가 없습니다.</p>`;
+    bindDelete($("adminBody"));
+  } catch (e) {
+    try { sessionStorage.removeItem("re_admin"); } catch {}
+    $("adminBody").innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+  }
+}
+$("adminRefresh").onclick = async () => {
+  $("adminRefresh").disabled = true; msg("전체를 새로 불러오는 중입니다...");
+  try { await call("refresh", { body: {}, admin: true }); await loadAdmin(); msg("전체 새로고침을 마쳤습니다."); } catch (e) { msg(e.message); }
+  $("adminRefresh").disabled = false;
+};
+
+// ---------- 시작 ----------
+(function init() {
+  const fromHash = normCode(location.hash.slice(1));
+  let saved = ""; try { saved = localStorage.getItem("re_code") || ""; } catch {}
+  const start = CODE_RE.test(fromHash) ? fromHash : (CODE_RE.test(saved) ? saved : "");
+  if (start) setCode(start); else renderCodebar();
+  updateSaveCodeUi();
+  load();
+})();
 </script>
 </body>
 </html>
