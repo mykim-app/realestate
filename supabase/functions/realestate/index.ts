@@ -158,7 +158,43 @@ function parcelJibun(pnu: string): string {
   const bu = parseInt(pnu.slice(15, 19), 10);
   return `${san}${bon}${bu ? "-" + bu : ""}`;
 }
-async function aptTrades(pnu: string, addr: string, months = 3) {
+// 아파트 전·월세 실거래 (같은 지번). 월세가 0이면 전세
+async function aptRents(pnu: string, addr: string, months = 6) {
+  const lawd = pnu.slice(0, 5);
+  const jibun = parcelJibun(pnu);
+  const tokens = addr.trim().split(/\s+/);
+  const dong = tokens.length >= 2 ? tokens[tokens.length - 2] : "";
+  const out: any[] = [];
+  for (let i = 0; i < months; i++) {
+    const u = new URL("https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent");
+    u.searchParams.set("serviceKey", env("DATA_GO_KR_KEY"));
+    u.searchParams.set("LAWD_CD", lawd);
+    u.searchParams.set("DEAL_YMD", yyyymm(i));
+    u.searchParams.set("numOfRows", "1000");
+    u.searchParams.set("pageNo", "1");
+    try {
+      const xml = await (await fetch(u)).text();
+      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+        const b = m[1];
+        if (tag(b, "jibun") !== jibun) continue;
+        if (dong && tag(b, "umdNm") !== dong) continue;
+        const monthly = parseInt(tag(b, "monthlyRent").replace(/,/g, "") || "0", 10);
+        out.push({
+          apt: tag(b, "aptNm"),
+          date: `${tag(b, "dealYear")}-${tag(b, "dealMonth").padStart(2, "0")}-${tag(b, "dealDay").padStart(2, "0")}`,
+          kind: monthly > 0 ? "월세" : "전세",
+          deposit_manwon: parseInt(tag(b, "deposit").replace(/,/g, ""), 10), // 보증금(만원)
+          monthly_manwon: monthly, // 월세(만원)
+          area_m2: parseFloat(tag(b, "excluUseAr")),
+          floor: tag(b, "floor"),
+        });
+      }
+    } catch { /* 해당 월 조회 실패 시 건너뜀 */ }
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
+}
+
+async function aptTrades(pnu: string, addr: string, months = 6) {
   const lawd = pnu.slice(0, 5);
   const jibun = parcelJibun(pnu);
   const tokens = addr.trim().split(/\s+/);
@@ -240,7 +276,9 @@ async function regionFor(addr: string) {
 
 // ---------- 스냅샷 ----------
 async function makeSnapshot(place: any) {
-  const [history, trades] = await Promise.all([landPriceHistory(place.pnu), aptTrades(place.pnu, place.addr ?? "")]);
+  const [history, trades, rents] = await Promise.all([
+    landPriceHistory(place.pnu), aptTrades(place.pnu, place.addr ?? ""), aptRents(place.pnu, place.addr ?? ""),
+  ]);
   const cur = await lookupParcel(place.lat, place.lng).catch(() => null);
   const payload = {
     land: {
@@ -249,6 +287,7 @@ async function makeSnapshot(place: any) {
       history,
     },
     trades,
+    rents,
   };
   const { error } = await sb.from("snapshots").upsert({
     place_id: place.id, week: weekMonday(), payload, updated_at: new Date().toISOString(),
