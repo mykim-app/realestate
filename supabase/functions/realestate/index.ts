@@ -158,73 +158,70 @@ function parcelJibun(pnu: string): string {
   const bu = parseInt(pnu.slice(15, 19), 10);
   return `${san}${bon}${bu ? "-" + bu : ""}`;
 }
+// 국토부 실거래 한 달치 항목(XML 블록) 가져오기
+async function molitItems(endpoint: string, lawd: string, ymd: string): Promise<string[]> {
+  const u = new URL(`https://apis.data.go.kr/1613000/${endpoint}`);
+  u.searchParams.set("serviceKey", env("DATA_GO_KR_KEY"));
+  u.searchParams.set("LAWD_CD", lawd);
+  u.searchParams.set("DEAL_YMD", ymd);
+  u.searchParams.set("numOfRows", "1000");
+  u.searchParams.set("pageNo", "1");
+  try {
+    const xml = await (await fetch(u)).text();
+    return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => m[1]);
+  } catch { return []; }
+}
+function parcelFilter(pnu: string, addr: string) {
+  const tokens = addr.trim().split(/\s+/);
+  return { jibun: parcelJibun(pnu), dong: tokens.length >= 2 ? tokens[tokens.length - 2] : "" };
+}
+const dealDate = (b: string) =>
+  `${tag(b, "dealYear")}-${tag(b, "dealMonth").padStart(2, "0")}-${tag(b, "dealDay").padStart(2, "0")}`;
+
 // 아파트 전·월세 실거래 (같은 지번). 월세가 0이면 전세
 async function aptRents(pnu: string, addr: string, months = 6) {
-  const lawd = pnu.slice(0, 5);
-  const jibun = parcelJibun(pnu);
-  const tokens = addr.trim().split(/\s+/);
-  const dong = tokens.length >= 2 ? tokens[tokens.length - 2] : "";
+  const { jibun, dong } = parcelFilter(pnu, addr);
+  const lists = await Promise.all(
+    Array.from({ length: months }, (_, i) => molitItems("RTMSDataSvcAptRent/getRTMSDataSvcAptRent", pnu.slice(0, 5), yyyymm(i))),
+  );
   const out: any[] = [];
-  for (let i = 0; i < months; i++) {
-    const u = new URL("https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent");
-    u.searchParams.set("serviceKey", env("DATA_GO_KR_KEY"));
-    u.searchParams.set("LAWD_CD", lawd);
-    u.searchParams.set("DEAL_YMD", yyyymm(i));
-    u.searchParams.set("numOfRows", "1000");
-    u.searchParams.set("pageNo", "1");
-    try {
-      const xml = await (await fetch(u)).text();
-      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
-        const b = m[1];
-        if (tag(b, "jibun") !== jibun) continue;
-        if (dong && tag(b, "umdNm") !== dong) continue;
-        const monthly = parseInt(tag(b, "monthlyRent").replace(/,/g, "") || "0", 10);
-        out.push({
-          apt: tag(b, "aptNm"),
-          date: `${tag(b, "dealYear")}-${tag(b, "dealMonth").padStart(2, "0")}-${tag(b, "dealDay").padStart(2, "0")}`,
-          kind: monthly > 0 ? "월세" : "전세",
-          deposit_manwon: parseInt(tag(b, "deposit").replace(/,/g, ""), 10), // 보증금(만원)
-          monthly_manwon: monthly, // 월세(만원)
-          area_m2: parseFloat(tag(b, "excluUseAr")),
-          floor: tag(b, "floor"),
-        });
-      }
-    } catch { /* 해당 월 조회 실패 시 건너뜀 */ }
+  for (const b of lists.flat()) {
+    if (tag(b, "jibun") !== jibun) continue;
+    if (dong && tag(b, "umdNm") !== dong) continue;
+    const monthly = parseInt(tag(b, "monthlyRent").replace(/,/g, "") || "0", 10);
+    out.push({
+      apt: tag(b, "aptNm"),
+      date: dealDate(b),
+      kind: monthly > 0 ? "월세" : "전세",
+      deposit_manwon: parseInt(tag(b, "deposit").replace(/,/g, ""), 10), // 보증금(만원)
+      monthly_manwon: monthly, // 월세(만원)
+      area_m2: parseFloat(tag(b, "excluUseAr")),
+      floor: tag(b, "floor"),
+    });
   }
   return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
 }
 
+// 아파트 매매 실거래 (같은 지번)
 async function aptTrades(pnu: string, addr: string, months = 6) {
-  const lawd = pnu.slice(0, 5);
-  const jibun = parcelJibun(pnu);
-  const tokens = addr.trim().split(/\s+/);
-  const dong = tokens.length >= 2 ? tokens[tokens.length - 2] : "";
+  const { jibun, dong } = parcelFilter(pnu, addr);
+  const lists = await Promise.all(
+    Array.from({ length: months }, (_, i) => molitItems("RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev", pnu.slice(0, 5), yyyymm(i))),
+  );
   const out: any[] = [];
-  for (let i = 0; i < months; i++) {
-    const u = new URL("https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev");
-    u.searchParams.set("serviceKey", env("DATA_GO_KR_KEY"));
-    u.searchParams.set("LAWD_CD", lawd);
-    u.searchParams.set("DEAL_YMD", yyyymm(i));
-    u.searchParams.set("numOfRows", "1000");
-    u.searchParams.set("pageNo", "1");
-    try {
-      const xml = await (await fetch(u)).text();
-      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
-        const b = m[1];
-        if (tag(b, "jibun") !== jibun) continue;
-        if (dong && tag(b, "umdNm") !== dong) continue;
-        if (tag(b, "cdealType") === "O") continue; // 해제(취소) 거래 제외
-        out.push({
-          apt: tag(b, "aptNm"),
-          date: `${tag(b, "dealYear")}-${tag(b, "dealMonth").padStart(2, "0")}-${tag(b, "dealDay").padStart(2, "0")}`,
-          price_manwon: parseInt(tag(b, "dealAmount").replace(/,/g, ""), 10), // 만원
-          area_m2: parseFloat(tag(b, "excluUseAr")), // 전용면적 ㎡
-          floor: tag(b, "floor"),
-        });
-      }
-    } catch { /* 해당 월 조회 실패 시 건너뜀 */ }
+  for (const b of lists.flat()) {
+    if (tag(b, "jibun") !== jibun) continue;
+    if (dong && tag(b, "umdNm") !== dong) continue;
+    if (tag(b, "cdealType") === "O") continue; // 해제(취소) 거래 제외
+    out.push({
+      apt: tag(b, "aptNm"),
+      date: dealDate(b),
+      price_manwon: parseInt(tag(b, "dealAmount").replace(/,/g, ""), 10), // 만원
+      area_m2: parseFloat(tag(b, "excluUseAr")), // 전용면적 ㎡
+      floor: tag(b, "floor"),
+    });
   }
-  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
 }
 
 // ---------- 한국부동산원 주간 아파트 동향 (R-ONE) ----------
@@ -329,8 +326,12 @@ Deno.serve(async (req) => {
     if (op === "lookup") {
       const lat = Number(url.searchParams.get("lat")), lng = Number(url.searchParams.get("lng"));
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return json({ error: "좌표가 올바르지 않습니다." }, 400);
+      // 위치를 찍으면 저장 전에도 모든 기록(공시지가·매매·전월세·지역 동향)을 한 번에 돌려줌
       const p = await lookupParcel(lat, lng);
-      return json({ ...p, history: await landPriceHistory(p.pnu) });
+      const [history, trades, rents, region] = await Promise.all([
+        landPriceHistory(p.pnu), aptTrades(p.pnu, p.addr), aptRents(p.pnu, p.addr), regionFor(p.addr),
+      ]);
+      return json({ ...p, history, trades, rents, region });
     }
 
     if (op === "geocode") {
